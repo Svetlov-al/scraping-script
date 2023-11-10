@@ -1,0 +1,36 @@
+games:
+  css: 'div.comparison-table-entry'
+  multiple: true
+  children:
+    name:
+      css: 'span.box-title > a > span'
+      type: Text
+    image:
+      css: 'img.cover-img-responsive'
+      type: Attribute
+      attribute: src
+    offers:
+      css: 'dl'
+      multiple: true
+      children:
+        country:
+          css: 'img.flag + span'
+          type: Text
+        price:
+          css: 'dt > span > span.showTooltip > span, dt > span[style="white-space: nowrap"]'
+          type: Text
+        price_usd:
+          css: 'dd > span[style="white-space: nowrap"]'
+          type: Text
+        discount:
+          css: 'dd > span > span.label.label-orange > span'
+          type: Text
+    deal_until:
+      css: 'div > small'
+      multiple: true
+      type: Text
+
+pages:
+  css: 'li a.last'
+  multiple: true
+  type: Link
