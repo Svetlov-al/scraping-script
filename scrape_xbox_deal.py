@@ -13,7 +13,6 @@ from selenium.webdriver.support import expected_conditions as EC
 import selectorlib
 import time
 
-
 URL = 'https://www.xbox-now.com/ru/deal-comparison'
 YAML_PATH = 'extract.yaml'
 
@@ -58,17 +57,17 @@ class Event:
         data = extractor.extract(source)
         return data['games']
 
-
-def extract_last_page_number(source):
-    extractor = selectorlib.Extractor.from_yaml_file(YAML_PATH)
-    data = extractor.extract(source)
-    last_page_links = data.get('pages')
-    if last_page_links:
-        last_page_url = last_page_links[-1]
-        page_number = int(last_page_url.split('=')[-1])
-        return page_number
-    else:
-        return None
+    @classmethod
+    def extract_last_page_number(cls, source):
+        extractor = selectorlib.Extractor.from_yaml_file(YAML_PATH)
+        data = extractor.extract(source)
+        last_page_links = data.get('pages')
+        if last_page_links:
+            last_page_url = last_page_links[-1]
+            page_number = int(last_page_url.split('=')[-1])
+            return page_number
+        else:
+            return None
 
 
 def scrape_page(page_number):
@@ -122,12 +121,17 @@ def filter_offers(games_data):
     filtered_data = []
     for game in games_data:
         # Очистка даты релиза и срока действия сделки
-        release_date = clean_date(next((text.split(': ')[1] for text in game['deal_until'] if "Дата релиза" in text), None))
-        deal_until = clean_date(next((text.split(': ')[1] for text in game['deal_until'] if "Deal until" in text), None), is_discount_until=True)
+        release_date = clean_date(
+            next((text.split(': ')[1] for text in game['deal_until'] if "Дата релиза" in text), None))
+        deal_until = clean_date(
+            next((text.split(': ')[1] for text in game['deal_until'] if "Deal until" in text), None),
+            is_discount_until=True)
 
         # Извлечение информации о цене в США
-        price_usa = clean_price(next((offer['price'] for offer in game['offers'] if clean_country(offer['country']) == 'США'), None))
-        price_usd_usa = next((offer['price_usd'] for offer in game['offers'] if clean_country(offer['country']) == 'США'), None)
+        price_usa = clean_price(
+            next((offer['price'] for offer in game['offers'] if clean_country(offer['country']) == 'США'), None))
+        price_usd_usa = next(
+            (offer['price_usd'] for offer in game['offers'] if clean_country(offer['country']) == 'США'), None)
 
         # Обработка каждого предложения
         for offer in game['offers']:
@@ -146,10 +150,11 @@ def filter_offers(games_data):
                 })
     return filtered_data
 
+
 if __name__ == "__main__":
     event = Event()
     source = event.scrape(URL)
-    last_page_number = extract_last_page_number(source)
+    last_page_number = Event.extract_last_page_number(source)
     # Создаем пул процессов
     with Pool(processes=os.cpu_count()) as pool:
         # Запускаем скрапинг всех страниц в пуле процессов
@@ -162,10 +167,10 @@ if __name__ == "__main__":
     with open('finished_data.csv', 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow(
-            ['id', 'title', 'country', 'price', 'price_usa', 'price_usa_in_usd', 'discount', 'discount_until', 'release_date', 'image'])
+            ['id', 'title', 'country', 'price', 'price_usa', 'price_usa_in_usd', 'discount', 'discount_until',
+             'release_date', 'image'])
 
         for number, game in enumerate(filtered_games_data):
-
             writer.writerow([
                 number + 1,
                 game['name'],
