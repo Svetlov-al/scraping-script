@@ -10,20 +10,26 @@ games:
       type: Attribute
       attribute: src
     offers:
-      css: 'dl'
+      css: 'div.box-body'
       multiple: true
       children:
         country:
           css: 'img.flag + span'
           type: Text
-        price:
-          css: 'dt > span > span.showTooltip > span, dt > span[style="white-space: nowrap"]'
+        on_sale:
+          css: 'dd > span > span.label.label-orange > span'
+          type: Text
+        price_rub:
+          css: 'dt > span[style="white-space: nowrap"]'
           type: Text
         price_usd:
-          css: 'dd > span[style="white-space: nowrap"]'
+          css: 'dd:nth-child(6) > span[style="white-space: nowrap"]'
           type: Text
-        discount:
-          css: 'dd > span > span.label.label-orange > span'
+        price_discount_rub:
+          css: 'dd:nth-child(8) > span > span'
+          type: Text
+        price_discount_usd:
+          css: 'dd:nth-child(9) > span'
           type: Text
     deal_until:
       css: 'div > small'

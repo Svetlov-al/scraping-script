@@ -1,6 +1,8 @@
 import csv
 import re
 import os
+from pprint import pprint
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -59,7 +61,8 @@ class EventScraper:
         page_source = local_driver.page_source
         local_driver.quit()
         end_scrapepage_time = time.time()
-        print(f"Страница {page_number} обработана. Затрачено времени: {end_scrapepage_time - start_scapepage_time:.2f} сек.")
+        print(
+            f"Страница {page_number} обработана. Затрачено времени: {end_scrapepage_time - start_scapepage_time:.2f} сек.")
         return page_source
 
     def extract(self, row_source: str) -> list[dict] | None:
@@ -119,35 +122,57 @@ class EventScraper:
         """Фильтрует предложения по определенным критериям."""
         filtered_data = []
         for game in games_data:
-            # Очистка даты релиза и срока действия сделки
+            # Извлечение даты релиза и срока действия скидки
             release_date = self.clean_date(
                 next((text.split(': ')[1] for text in game['deal_until'] if "Дата релиза" in text), None))
-            deal_until = self.clean_date(
+            discount_until = self.clean_date(
                 next((text.split(': ')[1] for text in game['deal_until'] if "Deal until" in text), None),
                 is_discount_until=True)
 
-            # Извлечение информации о цене в США
-            price_usa = self.clean_price(
-                next((offer['price'] for offer in game['offers'] if self.clean_country(offer['country']) == 'США'),
-                     None))
-            price_usd_usa = next(
-                (offer['price_usd'] for offer in game['offers'] if self.clean_country(offer['country']) == 'США'), None)
+            game_info = {
+                'name': game['name'],
+                'image': game['image'],
+                'release_date': release_date,
+                'discount_until': discount_until,
+                'USA': None,
+                'other_country': None
+            }
 
-            # Обработка каждого предложения
             for offer in game['offers']:
                 country = self.clean_country(offer['country'])
-                if country and any(c in country for c in ['Аргентина', 'Турция']):
-                    filtered_data.append({
-                        'name': game['name'],
-                        'country': country,
-                        'price': self.clean_price(offer['price']),
-                        'price_usa': price_usa,
-                        'price_usa_in_usd': self.clean_price(price_usd_usa, is_usd=True),
-                        'discount': self.clean_discount(offer['discount']),
-                        'discount_until': deal_until,
-                        'release_date': release_date,
-                        'image': game['image']
-                    })
+                if country == 'США':
+                    if 'on_sale' in offer and 'с GOLD' not in offer['on_sale']:
+                        game_info['USA'] = {
+                            'type': offer.get('on_sale'),
+                            'price_rub': self.clean_price(offer.get('price_rub')),
+                            'price_usd': self.clean_price(offer.get('price_usd'), is_usd=True)
+                        }
+                    elif 'с GOLD' in offer.get('on_sale', ''):
+                        game_info['USA'] = {
+                            'type': offer['on_sale'],
+                            'price_rub': self.clean_price(offer.get('price_discount_rub')),
+                            'price_usd': self.clean_price(offer.get('price_discount_usd'), is_usd=True)
+                        }
+
+                elif country in ['Аргентина', 'Турция']:
+                    if 'on_sale' in offer and 'с GOLD' not in offer['on_sale']:
+                        game_info['other_country'] = {
+                            'country': country,
+                            'type': offer['on_sale'],
+                            'price_rub': self.clean_price(offer.get('price_rub')),
+                            'price_usd': self.clean_price(offer.get('price_usd'), is_usd=True)
+                        }
+                    elif 'с GOLD' in offer.get('on_sale', ''):
+                        game_info['other_country'] = {
+                            'country': country,
+                            'type': offer['on_sale'],
+                            'price_rub': self.clean_price(offer.get('price_discount_rub')),
+                            'price_usd': self.clean_price(offer.get('price_discount_usd'), is_usd=True)
+                        }
+
+            if game_info['USA'] and game_info['other_country']:
+                filtered_data.append(game_info)
+
         return filtered_data
 
     def save_to_csv(self, games_data: list[dict], filename=None) -> str:
@@ -155,45 +180,33 @@ class EventScraper:
         filename = filename or self.filename
         with open(filename, 'w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
-            writer.writerow(
-                ['id', 'title', 'country', 'price', 'price_usa', 'price_usa_in_usd', 'discount', 'discount_until',
-                 'release_date', 'image'])
+            writer.writerow([
+                'id', 'title', 'usa_price', 'usa_price_usd', 'discount_type',
+                'other_country', 'other_price_rub', 'other_price_usd', 'discount_other_type',
+                'discount_until', 'release_date', 'image'
+            ])
 
             for number, game in enumerate(games_data):
+                usa_info = game['USA']
+                other_info = game['other_country']
                 writer.writerow([
                     number + 1,
                     game['name'],
-                    game['country'],
-                    game['price'],
-                    game['price_usa'],
-                    game['price_usa_in_usd'],
-                    game['discount'],
-                    game['discount_until'],
-                    game['release_date'],
+                    usa_info.get('price_rub', ''),
+                    usa_info.get('price_usd', ''),
+                    usa_info.get('type', ''),
+                    other_info.get('country', ''),
+                    other_info.get('price_rub', ''),
+                    other_info.get('price_usd', ''),
+                    other_info.get('type', ''),
+                    game.get('discount_until', ''),
+                    game.get('release_date', ''),
                     game['image']
                 ])
         return filename
 
     def close(self):
         self.driver.quit()
-
-    def run(self):
-        """Запускает процесс извлечения данных о скидках."""
-        try:
-            source = self.scrape()
-            last_page_number = self.extract_last_page_number(source)
-            all_games_data = []
-
-            with Pool(processes=os.cpu_count()) as pool:
-                results = pool.map(self.scrape, range(1, last_page_number + 1))
-                for result in results:
-                    data = self.extract(result)
-                    all_games_data.extend(data)
-
-            filtered_games_data = self.filter_offers(all_games_data)
-            self.save_to_csv(filtered_games_data)
-        finally:
-            self.close()
 
 
 def scrape_page(page_number):
@@ -217,12 +230,12 @@ if __name__ == '__main__':
         # Затем запускаем многопроцессный скрапинг
         with Pool(processes=os.cpu_count()) as pool:
             results = pool.map(scrape_page, range(1, last_page_number + 1))
-
+            # results = pool.map(scrape_page, [1])
         all_games_data = []
         for result in results:
             data = scraper.extract(result)
             all_games_data.extend(data)
-
+        # pprint(all_games_data)
         filtered_games_data = scraper.filter_offers(all_games_data)
         scraper.save_to_csv(filtered_games_data)
     finally:
